@@ -1,0 +1,17 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: Utils
+Bundle-SymbolicName: org.ancit.github.utils;singleton:=true
+Bundle-Version: 1.0.0.qualifier
+Bundle-Activator: org.ancit.github.utils.Activator
+Bundle-Vendor: Ancit
+Require-Bundle: org.eclipse.ui,
+ org.eclipse.core.runtime,
+ org.eclipse.egit.github.core,
+ org.eclipse.egit.ui,
+ org.eclipse.jgit,
+ org.eclipse.zest.core,
+ org.eclipse.zest.layouts,
+ org.eclipse.equinox.security;bundle-version="1.1.1"
+Bundle-RequiredExecutionEnvironment: JavaSE-1.6
+Bundle-ActivationPolicy: lazy

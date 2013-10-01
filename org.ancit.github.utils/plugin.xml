@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+   <extension
+         point="org.eclipse.ui.views">
+      <category
+            id="org.ancit.github.utils.mainCat"
+            name="GitHub Utils">
+      </category>
+      <view
+            category="org.ancit.github.utils.mainCat"
+            class="org.ancit.github.utils.forkvis.views.ForkZestView"
+            icon="icons/forkView.png"
+            id="org.ancit.github.utils.forkvis.views.ForkZestView"
+            name="Fork Zest Visualizer"
+            restorable="true">
+      </view>
+   </extension>
+   <extension
+         point="org.eclipse.ui.preferencePages">
+      <page
+            class="org.ancit.github.utils.preferences.EGitExtensionPreferencePage"
+            id="org.ancit.github.utils.preferences.EGitExtensionPreferencePage"
+            name="eGit-extensions">
+      </page>
+      <page
+            category="org.ancit.github.utils.preferences.EGitExtensionPreferencePage"
+            class="org.ancit.github.utils.preferences.GitHubExtensionsPreferencePage"
+            id="org.ancit.github.utils.preferences.GitHubExtensionsPreferencePage"
+            name="github-extensions">
+      </page>
+   </extension>
+
+</plugin>
