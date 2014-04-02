@@ -1,10 +1,14 @@
 package org.ancit.github.utils.pr.wizards;
 
 import java.io.IOException;
+import java.io.StringReader;
 import java.net.URISyntaxException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.ancit.github.utils.pr.dialog.AuthenticationDialog;
 import org.eclipse.egit.github.core.PullRequest;
@@ -12,14 +16,28 @@ import org.eclipse.egit.github.core.PullRequestMarker;
 import org.eclipse.egit.github.core.RepositoryCommit;
 import org.eclipse.egit.github.core.RepositoryId;
 import org.eclipse.egit.github.core.client.GitHubClient;
+import org.eclipse.egit.github.core.service.CommitService;
 import org.eclipse.egit.github.core.service.PullRequestService;
+import org.eclipse.egit.ui.UIPreferences;
 import org.eclipse.egit.ui.internal.repository.tree.RefNode;
 import org.eclipse.equinox.security.storage.ISecurePreferences;
 import org.eclipse.equinox.security.storage.SecurePreferencesFactory;
 import org.eclipse.equinox.security.storage.StorageException;
+import org.eclipse.jface.action.Action;
+import org.eclipse.jface.action.IMenuListener;
+import org.eclipse.jface.action.IMenuManager;
+import org.eclipse.jface.action.MenuManager;
+import org.eclipse.jface.bindings.keys.KeyStroke;
+import org.eclipse.jface.bindings.keys.ParseException;
 import org.eclipse.jface.dialogs.IDialogConstants;
 import org.eclipse.jface.dialogs.MessageDialog;
+import org.eclipse.jface.fieldassist.ContentProposalAdapter;
+import org.eclipse.jface.fieldassist.ControlDecoration;
+import org.eclipse.jface.fieldassist.FieldDecorationRegistry;
+import org.eclipse.jface.fieldassist.SimpleContentProposalProvider;
+import org.eclipse.jface.fieldassist.TextContentAdapter;
 import org.eclipse.jface.layout.GridDataFactory;
+import org.eclipse.jface.preference.IPreferenceStore;
 import org.eclipse.jface.viewers.ArrayContentProvider;
 import org.eclipse.jface.viewers.DoubleClickEvent;
 import org.eclipse.jface.viewers.IDoubleClickListener;
@@ -41,6 +59,11 @@ import org.eclipse.jgit.transport.URIish;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.browser.Browser;
 import org.eclipse.swt.custom.SashForm;
+import org.eclipse.swt.dnd.Clipboard;
+import org.eclipse.swt.dnd.TextTransfer;
+import org.eclipse.swt.dnd.Transfer;
+import org.eclipse.swt.events.FocusEvent;
+import org.eclipse.swt.events.FocusListener;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.graphics.Image;
@@ -52,13 +75,17 @@ import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Group;
 import org.eclipse.swt.widgets.Label;
+import org.eclipse.swt.widgets.Menu;
 import org.eclipse.swt.widgets.TabFolder;
 import org.eclipse.swt.widgets.TabItem;
 import org.eclipse.swt.widgets.Table;
+import org.eclipse.swt.widgets.TableColumn;
 import org.eclipse.swt.widgets.Text;
+import org.eclipse.ui.IMemento;
 import org.eclipse.ui.ISharedImages;
 import org.eclipse.ui.PlatformUI;
-import org.eclipse.swt.widgets.TableColumn;
+import org.eclipse.ui.WorkbenchException;
+import org.eclipse.ui.XMLMemento;
 
 public class PullRequestWizardPage extends WizardPage {
 	private class TableLabelProvider extends LabelProvider implements ITableLabelProvider {
@@ -121,6 +148,8 @@ public class PullRequestWizardPage extends WizardPage {
 	private Table commitTable;
 	private RepositoryId repo;
 	private TableViewer commitViewer;
+	protected Action copyUrlAction;
+	private CommitService commitService;
 
 	
 	/**
@@ -139,6 +168,7 @@ public class PullRequestWizardPage extends WizardPage {
 		configure(client);
 		
 		prService = new PullRequestService(client);
+		commitService = new CommitService(client);
 		
 	}
 	
@@ -164,6 +194,36 @@ public class PullRequestWizardPage extends WizardPage {
 			
 			txtTitle = new Text(grpPullRequestInfo, SWT.BORDER);
 			txtTitle.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false, 1, 1));
+			txtTitle.addFocusListener(new FocusListener() {
+				
+				@Override
+				public void focusLost(FocusEvent e) {
+					if(txtDescription.getText().trim().isEmpty()){
+					txtDescription.setText(txtTitle.getText());
+					}
+				}
+				
+				@Override
+				public void focusGained(FocusEvent e) {
+					// TODO Auto-generated method stub
+					
+				}
+			});
+			// create the decoration for the text component
+			final ControlDecoration deco = new ControlDecoration(txtTitle, SWT.TOP
+			  | SWT.LEFT);
+
+			// use an existing image
+			Image image = FieldDecorationRegistry.getDefault()
+			  .getFieldDecoration(FieldDecorationRegistry.DEC_INFORMATION)
+			  .getImage();
+
+			// set description and image
+			deco.setDescriptionText("Use DownArrow to see possible values");
+			deco.setImage(image);
+
+			// always show decoration
+			deco.setShowOnlyOnFocus(false);
 			
 			Label lblDescription = new Label(grpPullRequestInfo, SWT.NONE);
 			lblDescription.setLayoutData(new GridData(SWT.RIGHT, SWT.CENTER, false, false, 1, 1));
@@ -215,7 +275,7 @@ public class PullRequestWizardPage extends WizardPage {
 			toBranch.addSelectionListener(new SelectionAdapter() {
 				@Override
 				public void widgetSelected(SelectionEvent e) {
-					List<PullRequest> pullRequest = getPullRequests();
+					List<PullRequest> pullRequest = getPullRequests(false);
 					tableViewer.setInput(pullRequest);
 				}
 			});
@@ -234,7 +294,7 @@ public class PullRequestWizardPage extends WizardPage {
 //					browser.setUrl(createURL());
 					setMessage(null);					
 					generatePullRequest();
-					List<PullRequest> pullRequest = getPullRequests();
+					List<PullRequest> pullRequest = getPullRequests(true);
 					tableViewer.setInput(pullRequest);
 
 				} else {
@@ -292,6 +352,8 @@ public class PullRequestWizardPage extends WizardPage {
 				}
 			}
 		});
+		makeActions();
+		hookContextMenu();
 		
 		final TabFolder tabFolder = new TabFolder(sashForm, SWT.NONE);
 		
@@ -350,9 +412,68 @@ public class PullRequestWizardPage extends WizardPage {
 					
 				}
 			});
+			
+			
+
+			
+				Set<String> commits = getComments();
+				
+				// help the user with the possible inputs
+				// "." and "#" activate the content proposals
+				char[] autoActivationCharacters = new char[] { '.', '#' ,','};
+				KeyStroke keyStroke;
+				//
+				try {
+				  keyStroke = KeyStroke.getInstance(SWT.ARROW_DOWN);
+				  ContentProposalAdapter adapter = new ContentProposalAdapter(txtTitle,
+				    new TextContentAdapter(),
+				    new SimpleContentProposalProvider(commits.toArray(new String[commits.size()])),
+				      keyStroke, autoActivationCharacters);
+				  adapter.setPropagateKeys(true);
+				  adapter.setAutoActivationDelay(1500);
+				  adapter.setProposalAcceptanceStyle(ContentProposalAdapter.PROPOSAL_INSERT);
+				    } catch (Exception e1) {
+				  e1.printStackTrace();
+				} 
 	}
 
-	protected List<PullRequest> getPullRequests() {
+	private void makeActions() {
+		copyUrlAction = new Action("Copy URL") {
+			@Override
+			public void run() {
+				IStructuredSelection sSelection = ((IStructuredSelection)tableViewer.getSelection());
+				if(!sSelection.isEmpty()) {
+					PullRequest pullRequest = (PullRequest)sSelection.getFirstElement();
+					Clipboard cp = new Clipboard(Display.getDefault());
+					TextTransfer textTransfer = TextTransfer.getInstance();
+			        cp.setContents(new Object[] { pullRequest.getHtmlUrl() },
+			            new Transfer[] { textTransfer });
+				}
+			}
+		};
+		
+	}
+
+
+	private void hookContextMenu() {
+		MenuManager mgr = new MenuManager();
+		mgr.setRemoveAllWhenShown(true);
+		mgr.addMenuListener(new IMenuListener() {
+			
+			@Override
+			public void menuAboutToShow(IMenuManager manager) {
+				manager.add(copyUrlAction);
+			}
+		});
+		
+		Menu menu = mgr.createContextMenu(tableViewer.getTable());
+		tableViewer.getTable().setMenu(menu);
+		
+		
+	}
+
+
+	protected List<PullRequest> getPullRequests(boolean isCreation) {
 		getBranchConfiguration(toBranch, TO_BRANCH);
 		getBranchConfiguration(fromBranch, FROM_BRANCH);
 		String[] toList = toBranchName.split(":");
@@ -378,6 +499,8 @@ public class PullRequestWizardPage extends WizardPage {
 			}
 		}
 		
+		if(!isCreation) {
+		
 		if(pullRequestExists) {
 			btnGeneratePullRequest.setEnabled(false);
 			setErrorMessage("Pull Request already Exists btw "+errorMessage);
@@ -386,7 +509,7 @@ public class PullRequestWizardPage extends WizardPage {
 			setErrorMessage(null);
 		}
 		
-		
+		}
 		return brPullRequests;
 	}
 
@@ -510,6 +633,33 @@ public class PullRequestWizardPage extends WizardPage {
 			client.setCredentials(user, password);
 			client.setUserAgent(user);
 		}
+	}
+	
+	private Set<String> getComments() {
+		IPreferenceStore preferenceStore = org.eclipse.egit.ui.Activator.getDefault().getPreferenceStore();
+		String all = preferenceStore.getString(
+				UIPreferences.COMMIT_DIALOG_HISTORY_MESSAGES);
+		if (all.length() == 0)
+			return Collections.emptySet();
+		int max = preferenceStore.getInt(
+				UIPreferences.COMMIT_DIALOG_HISTORY_SIZE);
+		if (max < 1)
+			return Collections.emptySet();
+		XMLMemento memento;
+		try {
+			memento = XMLMemento.createReadRoot(new StringReader(all));
+		} catch (WorkbenchException e) {
+			org.eclipse.egit.ui.Activator.logError(
+					"Error reading commit message history", e); //$NON-NLS-1$
+			return Collections.emptySet();
+		}
+		Set<String> messages = new LinkedHashSet<String>();
+		for (IMemento child : memento.getChildren("message")) {
+			messages.add(child.getTextData());
+			if (messages.size() == max)
+				break;
+		}
+		return messages;
 	}
 
 }
